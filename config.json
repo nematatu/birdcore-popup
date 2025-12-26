@@ -2,7 +2,7 @@
   "_comment": "aliases に正式名称: 略称、courts に コート番号(文字列): YouTube URL を追加してください",
   "aliases": {},
   "courts": {
-    "1": "https://www.youtube.com/watch?v=4dnTp8wxB68&t=1s",
+    "1": "https://www.youtube.com/watch?v=4dnTp8wxB68",
     "2": "https://www.youtube.com/watch?v=zXYWLWvVSdk",
     "3": "https://www.youtube.com/watch?v=fuGmEeDJ9Ts",
     "4": "https://www.youtube.com/watch?v=_yXn3IEeAOw",
