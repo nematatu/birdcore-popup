@@ -600,41 +600,6 @@ main {
   padding: 8px 2px;
 }
 
-.debug-panel {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: #f2f2f2;
-  border-top: 1px dashed #bdbdbd;
-  font-size: 10px;
-}
-
-.debug-label {
-  font-weight: 700;
-  color: #333333;
-}
-
-.debug-link {
-  border: 1px solid #9c9c9c;
-  background: #ffffff;
-  border-radius: 2px;
-  padding: 1px 6px;
-  font-size: 10px;
-  text-decoration: none;
-  color: #d60000;
-}
-
-.debug-link.disabled {
-  color: #9c9c9c;
-  border-color: #c4c4c4;
-  pointer-events: none;
-}
-
-.debug-meta {
-  color: #666666;
-}
-
 .footer {
   position: sticky;
   bottom: 0;

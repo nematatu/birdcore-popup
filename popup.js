@@ -29,9 +29,7 @@
     finishedList: document.getElementById("finished-list"),
     finishedCount: document.getElementById("finished-count"),
     status: document.getElementById("status"),
-    refresh: document.getElementById("refresh"),
-    youtubeTestLink: document.getElementById("youtube-test-link"),
-    youtubeTestMeta: document.getElementById("youtube-test-meta")
+    refresh: document.getElementById("refresh")
   };
 
   let tournament = null;
@@ -45,7 +43,6 @@
   let aliasLoaded = false;
   let courtYoutubeMap = new Map();
   let courtYoutubeLoaded = false;
-  let courtYoutubeSource = "";
   let eventMap = new Map();
   let roundMap = new Map();
   let liveBusy = false;
@@ -263,42 +260,6 @@
     }
   };
 
-  const updateYoutubeTestLink = () => {
-    if (!els.youtubeTestLink) return;
-    const entries = Array.from(courtYoutubeMap.entries())
-      .map(([key, value]) => [String(key).trim(), value])
-      .filter(([, value]) => value);
-    if (!entries.length) {
-      els.youtubeTestLink.classList.add("disabled");
-      els.youtubeTestLink.setAttribute("aria-disabled", "true");
-      els.youtubeTestLink.removeAttribute("title");
-      els.youtubeTestLink.href = "#";
-      els.youtubeTestLink.textContent = "リンク確認";
-      if (els.youtubeTestMeta) {
-        els.youtubeTestMeta.textContent = "未取得";
-      }
-      return;
-    }
-    entries.sort((a, b) => {
-      const aNum = Number.parseInt(a[0], 10);
-      const bNum = Number.parseInt(b[0], 10);
-      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
-      return a[0].localeCompare(b[0]);
-    });
-    const [courtKey, url] = entries[0];
-    const label = courtKey.includes("コート") ? courtKey : `コート${courtKey}`;
-    els.youtubeTestLink.classList.remove("disabled");
-    els.youtubeTestLink.setAttribute("aria-disabled", "false");
-    els.youtubeTestLink.href = url;
-    els.youtubeTestLink.textContent = `${label} を開く`;
-    els.youtubeTestLink.title = url;
-    if (els.youtubeTestMeta) {
-      const sourceLabel =
-        courtYoutubeSource === "remote" ? "リモート" : courtYoutubeSource === "local" ? "ローカル" : "不明";
-      els.youtubeTestMeta.textContent = `取得元: ${sourceLabel}`;
-    }
-  };
-
   const applyConfigData = data => {
     if (!data || typeof data !== "object") {
       return { aliases: false, courts: false };
@@ -320,11 +281,7 @@
       ]);
       courtYoutubeMap = new Map(entries);
       courtYoutubeLoaded = true;
-      courtYoutubeSource = "remote";
       courtApplied = true;
-    }
-    if (courtApplied) {
-      updateYoutubeTestLink();
     }
     return { aliases: aliasApplied, courts: courtApplied };
   };
@@ -386,8 +343,6 @@
       const res = await fetch(chrome.runtime.getURL("court-youtube.json"));
       if (!res.ok) {
         courtYoutubeLoaded = true;
-        courtYoutubeSource = "";
-        updateYoutubeTestLink();
         return false;
       }
       const json = await res.json();
@@ -397,14 +352,10 @@
       ]);
       courtYoutubeMap = new Map(entries);
       courtYoutubeLoaded = true;
-      courtYoutubeSource = "local";
-      updateYoutubeTestLink();
       return true;
     } catch (err) {
       console.warn("Court YouTube map load failed", err);
       courtYoutubeLoaded = true;
-      courtYoutubeSource = "";
-      updateYoutubeTestLink();
       return false;
     }
   };
@@ -420,9 +371,6 @@
     }
     if (!applied.courts && !courtYoutubeLoaded) {
       await loadLocalCourtYoutube();
-    }
-    if (!applied.courts && courtYoutubeLoaded) {
-      updateYoutubeTestLink();
     }
   };
 
@@ -441,7 +389,6 @@
     if (!applied.courts && !courtYoutubeLoaded) {
       await loadLocalCourtYoutube();
     }
-    updateYoutubeTestLink();
     teamMap = new Map();
     await refreshAll();
   };
