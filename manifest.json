@@ -21,7 +21,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "windows"],
   "host_permissions": ["https://www.birdscore.live/*", "https://raw.githubusercontent.com/*"],
   "commands": {
     "_execute_action": {

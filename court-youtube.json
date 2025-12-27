@@ -1,11 +1,5 @@
 {
   "_comment": "courts に コート番号(文字列) : YouTube URL を追加してください",
   "courts": {
-      "1": "https://www.youtube.com/watch?v=4dnTp8wxB68&pp=0gcJCU0KAYcqIYzv",
-      "2": "https://www.youtube.com/watch?v=zXYWLWvVSdk",
-      "3": "https://www.youtube.com/watch?v=fuGmEeDJ9Ts",
-      "4": "https://www.youtube.com/watch?v=_yXn3IEeAOw",
-      "5": "https://www.youtube.com/watch?v=3WLNV2eQq88", 
-      "6": "https://www.youtube.com/watch?v=tnYriDS5G54"
   }
 }

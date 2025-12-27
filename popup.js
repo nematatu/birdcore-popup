@@ -29,8 +29,17 @@
     finishedList: document.getElementById("finished-list"),
     finishedCount: document.getElementById("finished-count"),
     status: document.getElementById("status"),
+    openWindow: document.getElementById("open-window"),
     refresh: document.getElementById("refresh")
   };
+
+  const isWindowMode = new URLSearchParams(window.location.search).get("mode") === "window";
+  if (isWindowMode) {
+    document.body.classList.add("window-mode");
+    if (els.openWindow) {
+      els.openWindow.style.display = "none";
+    }
+  }
 
   let tournament = null;
   let currentTournament = {
@@ -1169,6 +1178,19 @@
 
   if (els.refresh) {
     els.refresh.addEventListener("click", () => refreshAll({ forceRemote: true }));
+  }
+
+  if (els.openWindow) {
+    els.openWindow.addEventListener("click", () => {
+      if (!chrome?.windows?.create) return;
+      const url = chrome.runtime.getURL("popup.html?mode=window");
+      chrome.windows.create({
+        url,
+        type: "popup",
+        width: 520,
+        height: 780
+      });
+    });
   }
 
   hydrateCachedView();
