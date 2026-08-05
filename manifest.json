@@ -22,7 +22,7 @@
     "128": "icons/icon128.png"
   },
   "permissions": ["storage", "windows"],
-  "host_permissions": ["https://www.birdscore.live/*", "https://raw.githubusercontent.com/*"],
+  "optional_host_permissions": ["https://www.birdscore.live/*", "https://raw.githubusercontent.com/*"],
   "commands": {
     "_execute_action": {
       "suggested_key": {

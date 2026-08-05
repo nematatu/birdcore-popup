@@ -1,10 +1,10 @@
 (() => {
   const CONFIG = {
     baseUrl: "https://www.birdscore.live",
-    sourceUrl: "https://www.birdscore.live/",
+    sourceUrl: "https://www.birdscore.live/web/ranking-circuit2026/",
     sourceLabel: "BIRDSCORE",
     tournamentName: "大会情報取得中",
-    tournamentId: "LQP3UkvciJmiVLqVsUcf",
+    tournamentId: "zDfkFC1HazFfwUlJamRA",
     livePollMs: 10000,
     finishedPollMs: 60000,
     finishedLimit: 6,
@@ -18,6 +18,11 @@
       "json/tournaments/list.json",
       "json/index.json"
     ]
+  };
+
+  const HOST_PERMISSIONS = {
+    birdscore: "https://www.birdscore.live/*",
+    rawGithub: "https://raw.githubusercontent.com/*"
   };
 
   const els = {
@@ -48,6 +53,7 @@
     sourceUrl: CONFIG.sourceUrl
   };
   let teamMap = new Map();
+  let playerProfileMap = new Map();
   let aliasMap = new Map();
   let aliasLoaded = false;
   let courtYoutubeMap = new Map();
@@ -81,6 +87,38 @@
       chrome.storage.local.set(value, () => resolve());
     });
 
+  const ensureHostPermission = origins =>
+    new Promise(resolve => {
+      if (!chrome?.permissions?.contains || !chrome?.permissions?.request) {
+        resolve(true);
+        return;
+      }
+      chrome.permissions.contains({ origins }, has => {
+        if (has) {
+          resolve(true);
+          return;
+        }
+        chrome.permissions.request({ origins }, granted => resolve(Boolean(granted)));
+      });
+    });
+
+  const ensureHostPermissionForUrl = async url => {
+    if (!url) return false;
+    const origins = [];
+    if (url.startsWith(CONFIG.baseUrl)) {
+      origins.push(HOST_PERMISSIONS.birdscore);
+    }
+    if (url.startsWith("https://raw.githubusercontent.com/")) {
+      origins.push(HOST_PERMISSIONS.rawGithub);
+    }
+    if (!origins.length) return true;
+    const granted = await ensureHostPermission(origins);
+    if (!granted) {
+      setStatus("サイトアクセスの許可が必要です", true);
+    }
+    return granted;
+  };
+
   const loadCached = async (key, loader) => {
     const cached = await storageGet(key);
     if (cached && Date.now() - cached.ts < CONFIG.cacheTtlMs) {
@@ -93,6 +131,9 @@
 
   const fetchJson = async path => {
     const url = `${CONFIG.baseUrl}/${path}`;
+    if (!(await ensureHostPermissionForUrl(url))) {
+      throw new Error("Host permission denied");
+    }
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
       throw new Error(`Fetch failed: ${res.status}`);
@@ -101,6 +142,9 @@
   };
 
   const fetchText = async url => {
+    if (!(await ensureHostPermissionForUrl(url))) {
+      throw new Error("Host permission denied");
+    }
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
       throw new Error(`Fetch failed: ${res.status}`);
@@ -298,6 +342,7 @@
   const loadRemoteConfig = async force => {
     const url = buildRemoteConfigUrl(force);
     if (!url) return null;
+    if (!(await ensureHostPermissionForUrl(url))) return null;
     const cached = await storageGet(REMOTE_CONFIG_KEY);
     if (!force) {
       if (cached?.data) return cached.data;
@@ -318,6 +363,7 @@
   const fetchRemoteConfig = async (force = false) => {
     const url = buildRemoteConfigUrl(force);
     if (!url) return null;
+    if (!(await ensureHostPermissionForUrl(url))) return null;
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) return null;
@@ -399,6 +445,7 @@
       await loadLocalCourtYoutube();
     }
     teamMap = new Map();
+    playerProfileMap = new Map();
     await refreshAll();
   };
 
@@ -621,8 +668,22 @@
 
   const resolveTournamentConfig = async () => {
     const cached = await storageGet("currentTournament");
-    if (cached?.data?.id) {
+    if (
+      cached?.data?.id &&
+      cached?.ts &&
+      Date.now() - cached.ts < CONFIG.tournamentCacheTtlMs
+    ) {
       return cached.data;
+    }
+    const configured = await tryFetchJson(`json/${CONFIG.tournamentId}/tournament.json`);
+    if (configured?.tournamentId === CONFIG.tournamentId) {
+      const fixed = {
+        id: CONFIG.tournamentId,
+        name: configured.tournamentName || CONFIG.tournamentName,
+        sourceUrl: CONFIG.sourceUrl
+      };
+      await storageSet({ currentTournament: { ts: Date.now(), data: fixed } });
+      return fixed;
     }
     const homeConfig = await resolveTournamentFromHome();
     if (homeConfig) {
@@ -652,25 +713,115 @@
     if (prevId && prevId !== currentTournament.id) {
       tournament = null;
       teamMap = new Map();
+      playerProfileMap = new Map();
       eventMap = new Map();
       roundMap = new Map();
     }
   };
 
-  const buildTeamMap = teamsJson => {
+  const buildTeamMapFromTeams = teamsJson => {
     const map = new Map();
-    teamsJson.teams.forEach(team => {
-      const players = team.players.map(player => ({
-        name: normalizeName(player.playerName),
-        belong: applyAlias(normalizeName(player.belong))
-      }));
+    const profiles = new Map();
+    (teamsJson.teams || []).forEach(team => {
+      const players = (team.players || []).map(player => {
+        const name = normalizeName(player.playerName);
+        const belong = applyAlias(normalizeName(player.belong));
+        if (player.playerId) {
+          profiles.set(player.playerId, {
+            name,
+            belong,
+            groupId: team.teamId
+          });
+        }
+        return {
+          name,
+          belong
+        };
+      });
       const names = players.map(player => player.name).filter(value => value);
       map.set(team.teamId, {
-        label: names.length ? names.join(" / ") : "TBD",
+        label: names.length ? names.join(" / ") : normalizeName(team.teamName) || "TBD",
         players: players.length ? players : []
       });
     });
-    return map;
+    return { map, profiles };
+  };
+
+  const buildTeamMapFromOrgs = orgsJson => {
+    const map = new Map();
+    const profiles = new Map();
+    (orgsJson.orgs || []).forEach(org => {
+      const label = normalizeName(org.orgShortName || org.orgName) || "TBD";
+      map.set(org.orgId, {
+        label,
+        players: []
+      });
+      (org.players || []).forEach(player => {
+        if (!player?.playerId) return;
+        profiles.set(player.playerId, {
+          name: normalizeName(player.playerName),
+          belong: label,
+          groupId: org.orgId
+        });
+      });
+    });
+    return { map, profiles };
+  };
+
+  const resolveTeamId = (match, order, teamIndex) => {
+    const orderTeam = order?.teams?.[teamIndex];
+    const directId = orderTeam?.teamId || orderTeam?.orgId || orderTeam?.id;
+    if (directId) return directId;
+    const matchId =
+      match?.teams?.[teamIndex]?.teamId ||
+      match?.teams?.[teamIndex]?.id ||
+      match?.orgs?.[teamIndex]?.orgId ||
+      match?.orgs?.[teamIndex]?.id;
+    if (matchId) return matchId;
+    const firstPlayerId = orderTeam?.players?.find(player => player?.playerId)?.playerId;
+    if (!firstPlayerId) return "";
+    return playerProfileMap.get(firstPlayerId)?.groupId || "";
+  };
+
+  const resolveTeamMeta = (match, order, teamIndex) => {
+    const orderTeam = order?.teams?.[teamIndex];
+    const teamId = resolveTeamId(match, order, teamIndex);
+    const fromMap = teamId ? teamMap.get(teamId) : null;
+    const fallbackLabel = normalizeName(orderTeam?.teamName || orderTeam?.orgName) || fromMap?.label || "-";
+
+    let players = [];
+    if (fromMap?.players?.length) {
+      players = fromMap.players;
+    } else if (orderTeam?.players?.length) {
+      players = orderTeam.players
+        .map(player => {
+          const profile = playerProfileMap.get(player.playerId);
+          if (profile?.name) {
+            return { name: profile.name, belong: "" };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    }
+
+    return {
+      label: fromMap?.label || fallbackLabel,
+      players
+    };
+  };
+
+  const buildParticipantMaps = data => {
+    if (data?.teams) return buildTeamMapFromTeams(data);
+    if (data?.orgs) return buildTeamMapFromOrgs(data);
+    return { map: new Map(), profiles: new Map() };
+  };
+
+  const loadParticipantData = async tournamentId => {
+    const teams = await tryFetchJson(`json/${tournamentId}/teams.json`);
+    if (teams?.teams) return teams;
+    const orgs = await tryFetchJson(`json/${tournamentId}/orgs.json`);
+    if (orgs?.orgs) return orgs;
+    throw new Error("Participant data unavailable");
   };
 
   const buildEventMap = tournamentJson => {
@@ -810,10 +961,8 @@
     card.appendChild(band);
 
     const body = el("div", "match-body");
-    const teamAId = order?.teams?.[0]?.teamId;
-    const teamBId = order?.teams?.[1]?.teamId;
-    const teamA = teamMap.get(teamAId);
-    const teamB = teamMap.get(teamBId);
+    const teamA = resolveTeamMeta(match, order, 0);
+    const teamB = resolveTeamMeta(match, order, 1);
     body.appendChild(buildTeamBlock(teamA, false));
 
     const scoreCenter = el("div", "score-center");
@@ -865,7 +1014,7 @@
     return card;
   };
 
-  const buildScoreTables = (order, isLive) => {
+  const buildScoreTables = (match, order) => {
     if (!order || !order.teams || order.teams.length < 2) return null;
     const config = tournament?.config || { gamePoint: 21 };
     const deuceIndex = config.gamePoint ? config.gamePoint - 1 : null;
@@ -917,7 +1066,7 @@
       let rowIndex = 0;
       teams.forEach((team, teamIndex) => {
         const players = team.players?.length ? team.players : [{ scores: [] }];
-        const teamMeta = teamMap.get(team.teamId);
+        const teamMeta = resolveTeamMeta(match, order, teamIndex);
         const labelList = teamMeta?.players?.length ? teamMeta.players : [teamMeta?.label || "-"];
 
         players.forEach((player, playerIndex) => {
@@ -986,7 +1135,7 @@
 
   const buildMatchCard = (court, match, order) => {
     const detailsId = `score-details-${detailCounter++}`;
-    const scoreTable = buildScoreTables(order, true);
+    const scoreTable = buildScoreTables(match, order);
     const details = el("div", "score-details");
     details.id = detailsId;
     if (scoreTable) details.appendChild(scoreTable);
@@ -1007,7 +1156,7 @@
 
   const buildFinishedCard = (match, order) => {
     const detailsId = `score-details-${detailCounter++}`;
-    const scoreTable = buildScoreTables(order, false);
+    const scoreTable = buildScoreTables(match, order);
     const details = el("div", "score-details");
     details.id = detailsId;
     if (scoreTable) details.appendChild(scoreTable);
@@ -1051,10 +1200,12 @@
       if (!aliasLoaded || !courtYoutubeLoaded) {
         await loadConfigMaps();
       }
-      const teams = await loadCached(cacheKey("teams"), () =>
-        fetchJson(`json/${getTournamentId()}/teams.json`)
+      const participantData = await loadCached(cacheKey("participants"), () =>
+        loadParticipantData(getTournamentId())
       );
-      teamMap = buildTeamMap(teams);
+      const maps = buildParticipantMaps(participantData);
+      teamMap = maps.map;
+      playerProfileMap = maps.profiles;
     }
   };
 

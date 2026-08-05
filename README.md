@@ -23,3 +23,4 @@ BIRDSCOREのライブスコアをポップアップで表示するChrome拡張�
 
 - ライブ: `courts.json` で現在試合中のコートを取得
 - 終了試合: `schedule.json` の終了フラグを参照して直近分を表示
+- 参加者: `teams.json` を優先し、取得不可の場合は `orgs.json` を使用
